@@ -7,7 +7,29 @@
 {def [ myList2 ] { from 1 to 10 } }
 // => myList2 = [ 1 2 3 4 5 6 7 8 9 10 ]
 
-{def [ doubled ] { map myList2 ( _ * 2 ) } }
+// {_ * _} => (Number, Number) -> Number
+// {_ * 2} => (Number) -> Number
+// {2 * 2} => Number
+
+// {_ divisible by 3}
+
+// { {_ % 3} . {_ == 0} }
+//
+// {_ % 3}  => (Number) -> Number
+// {_ == 0} => (Number) -> Boolean
+// {_ . _}  => (x, y, z) : ((x) -> y, (y) -> z) -> ((x) -> z)
+
+/* TYPES
+
+Symbol
+Number
+List
+
+*/
+
+
+{def [ doubled ] { map myList2 {_ * 2} } }
+{def [ doubledDivBy3 ] { filter doubled {_ divisible by 3} } }
 // ( _ * 2 ) => ( x -> x * 2 )
 // => doubled = [ 2 4 6 .. 20 ]
 
