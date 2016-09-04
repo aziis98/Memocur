@@ -2,11 +2,10 @@ package com.aziis98.memocur
 
 import java.nio.file.*
 import java.util.*
-import java.util.regex.Pattern
 
 // Copyright 2016 Antonio De Lucreziis
 
-const val validSymbols = "$'+-*/^<>=?_."
+const val validSymbols = "$'+-*/^<>=?_.%"
 
 fun Char.isValidChar() = isLetter() || validSymbols.indexOf(this) != -1
 
@@ -56,14 +55,9 @@ fun <T> MutableList<T>.pop() = removeAt(0)
 fun <T> MutableList<T>.peek(at: Int = 0) = get(at)
 fun <T> MutableList<T>.peek(fromIndex: Int, toIndex: Int) = subList(fromIndex, toIndex)
 
-sealed class Expression {
-    class Symbol(val name: String) : Expression()
-
-
-}
-
 object Memocur {
 
+    @Suppress("UNUSED_VARIABLE")
     val basicContext = MemocurContext().apply {
         addSignature(
             FunctionSignature(listOf(
@@ -85,6 +79,101 @@ object Memocur {
                         .toList()
                 )
             })
+        )
+
+        addSignature(FunctionSignature(listOf(
+                matchType(Type.Number),
+                matchSymbol("+"),
+                matchType(Type.Number)
+            ), fnExecution {
+                val (a, plus, b) = it
+
+                a as Value.Number
+                b as Value.Number
+
+                return@fnExecution valueNumber(
+                    a.value + b.value
+                )
+            })
+        )
+
+        addSignature(FunctionSignature(listOf(
+                matchType(Type.Number),
+                matchSymbol("-"),
+                matchType(Type.Number)
+            ), fnExecution {
+            val (a, minus, b) = it
+
+            a as Value.Number
+            b as Value.Number
+
+            return@fnExecution valueNumber(
+                a.value - b.value
+            )
+        })
+        )
+
+        addSignature(FunctionSignature(listOf(
+                matchType(Type.Number),
+                matchSymbol("*"),
+                matchType(Type.Number)
+            ), fnExecution {
+            val (a, times, b) = it
+
+            a as Value.Number
+            b as Value.Number
+
+            return@fnExecution valueNumber(
+                a.value * b.value
+            )
+        })
+        )
+
+        addSignature(FunctionSignature(listOf(
+                matchType(Type.Number),
+                matchSymbol("/"),
+                matchType(Type.Number)
+            ), fnExecution {
+            val (a, divide, b) = it
+
+            a as Value.Number
+            b as Value.Number
+
+            return@fnExecution valueNumber(
+                a.value / b.value
+            )
+        })
+        )
+
+        addSignature(FunctionSignature(listOf(
+                matchType(Type.Number),
+                matchSymbol("%"),
+                matchType(Type.Number)
+            ), fnExecution {
+            val (a, mod, b) = it
+
+            a as Value.Number
+            b as Value.Number
+
+            return@fnExecution valueNumber(
+                a.value % b.value
+            )
+        })
+        )
+
+
+        addSignature(FunctionSignature(listOf(
+            matchSymbol("call"),
+            matchFunction(),
+            matchType(Type.List)
+        ), fnExecution {
+            val (call, fn, args) = it
+
+            fn as Value.Function
+            args as Value.MList
+
+            return@fnExecution fn(args.list)
+        })
         )
     }
 
@@ -111,42 +200,104 @@ object Memocur {
 
         val astRoot = parseExpression(tokens)
 
-        println(astRoot.toString())
+        // println("Abstract Syntaxt Tree : $astRoot")
 
-        return Value.Symbol("nothing")
+        return evaluateASTElement(astRoot, context)
     }
 
+    fun evaluateASTElement(element: ASTElement, context: MemocurContext): Value {
+        return when (element) {
 
+            is ASTElement.Leaf.Number -> valueNumber(element.source.toDouble())
+
+            is ASTElement.Leaf.Symbol -> valueSymbol(element.source)
+
+            is ASTElement.Leaf.LambdaPlaceholder -> valueLambdaPlaceholder()
+
+            is ASTElement.List -> valueListOf(element.list.map { evaluateASTElement(it, context) })
+
+            is ASTElement.Call -> context.evaluatePattern(element.list.map { evaluateASTElement(it, context) })
+
+            is ASTElement.Lambda -> evaluateLambda(element, context)
+
+            else -> error("Unable to evaluate: $element")
+        }
+    }
+
+    fun evaluateLambda(element: ASTElement.Lambda, context: MemocurContext) : Value.Function {
+        val paramCount = element.list.count { it is ASTElement.Leaf.LambdaPlaceholder }
+
+        val precomp = element.list.map {
+            evaluateASTElement(it, context)
+        }
+
+        return Value.Function(Type.Function(paramCount)) { arguments ->
+            if (arguments.size != paramCount) error("Called $precomp with ${arguments.size} arguments instead of $paramCount")
+
+            val actualParams = mutableListOf<Value>()
+
+            var i = 0
+
+            for (value in precomp) {
+                if (value is Value.LambdaPlaceholder) {
+                    actualParams.add(arguments[i])
+                    i++
+                }
+                else {
+                    actualParams.add(value)
+                }
+            }
+
+            context.evaluatePattern(actualParams)
+        }
+    }
 
     private fun parseExpression(tokens: MutableList<String>) : ASTElement {
         val next = tokens.peek()
 
         return when {
+
             next == "{" ->
                 parseFunctionCall(tokens)
+
             next == "[" ->
                 parseList(tokens)
+
+            next == "_" ->
+                parseLambdaPlaceholder(tokens)
+
             RegexPatterns.NUMBER.matches(next) ->
                 parseNumber(tokens)
+
             RegexPatterns.SYMBOL.matches(next) ->
                 parseSymbol(tokens)
 
-            else -> error("Unable to parse: $next")
+            else -> error("Unable to parse: \"$next\"")
         }
     }
 
-    private fun parseFunctionCall(tokens: MutableList<String>) : ASTElement.Call {
+    private fun parseFunctionCall(tokens: MutableList<String>) : ASTElement {
         val list = mutableListOf<ASTElement>()
+        var isLambda = false
 
         tokens.pop()
 
         while (tokens.peek() != "}") {
-            list.add(parseExpression(tokens))
+            val expression = parseExpression(tokens)
+
+            if (expression is ASTElement.Leaf.LambdaPlaceholder) isLambda = true
+
+            list.add(expression)
         }
 
         tokens.pop()
 
-        return ASTElement.Call(list)
+        if (isLambda) {
+            return ASTElement.Lambda(list)
+        }
+        else {
+            return ASTElement.Call(list)
+        }
     }
 
     private fun parseList(tokens: MutableList<String>): ASTElement.List {
@@ -163,6 +314,11 @@ object Memocur {
         return ASTElement.List(list)
     }
 
+    private fun parseLambdaPlaceholder(tokens: MutableList<String>): ASTElement.Leaf.LambdaPlaceholder {
+        tokens.pop()
+        return ASTElement.Leaf.LambdaPlaceholder()
+    }
+
     private fun parseNumber(tokens: MutableList<String>) : ASTElement.Leaf.Number {
         return ASTElement.Leaf.Number(tokens.pop())
     }
@@ -177,8 +333,12 @@ sealed class ASTElement(val list: kotlin.collections.List<ASTElement>) {
     sealed class Leaf(val source: String) : ASTElement(emptyList()) {
         class Number(source: String) : Leaf(source)
         class Symbol(source: String) : Leaf(source)
+        class LambdaPlaceholder : Leaf("_")
 
         override fun toString() = "Leaf($source)"
+    }
+    class Lambda(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
+        override fun toString() = list.joinToString(", ", "Lambda(", ")")
     }
     class Call(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
         override fun toString() = list.joinToString(", ", "FunctionCall(", ")")
@@ -205,69 +365,6 @@ class MemocurContext(val parent: MemocurContext? = null) {
         return getFunctionSignature(arguments).functionExecution.execute(arguments)
     }
     
-}
-
-sealed class Type(val name: String) {
-    object Symbol : Type("symbol")
-    object Number : Type("number")
-    object List : Type("list")
-    
-    object MObject : Type("object")
-
-    override fun hashCode() = name.hashCode()
-    override fun equals(other: Any?): Boolean {
-        if (other != null && other is Type) {
-            return other.name == name
-        }
-        return false
-    }
-
-    override fun toString() = "[$name]"
-}
-
-fun valueSymbol(name: String) = Value.Symbol(name)
-fun valueNumber(number: Number) = Value.Number(number.toDouble())
-fun valueListOf(vararg list: Value) = Value.MList(list.toList())
-
-sealed class Value(val type: Type) {
-    class Symbol(val name: String) : Value(Type.Symbol) {
-        companion object {
-            val Nothing = Symbol("nothing")
-        }
-
-        override fun toString() = "Symbol($name)"
-    }
-    class Number(val value: Double) : Value(Type.Number) {
-        override fun toString() = "Number($value)"
-    }
-    class MList(val list: List<Value>) : Value(Type.List) {
-        override fun toString() = "List(${list.joinToString(", ")})"
-    }
-}
-
-fun matchSymbol(name: String) = Matcher.MatchSymbol(name)
-fun matchType(type: Type) = Matcher.MatchType(type)
-
-sealed class Matcher(val type: Type) {
-    fun match(value: Value): Boolean {
-        return type == value.type && matchValue(value)
-    }
-
-    protected abstract fun matchValue(value: Value): Boolean
-
-    class MatchSymbol(val name: String) : Matcher(Type.Symbol) {
-        override fun matchValue(value: Value): Boolean {
-            return name == (value as Value.Symbol).name
-        }
-
-        override fun toString() = "$name"
-    }
-
-    class MatchType(type: Type) : Matcher(type) {
-        override fun matchValue(value: Value) = true
-
-        override fun toString() = "$type"
-    }
 }
 
 class FunctionSignature(val signature: List<Matcher>, val functionExecution: FunctionExecution) {
