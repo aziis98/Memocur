@@ -1,7 +1,10 @@
 /* [function [@a * @b] [ ... ] ] */
 
 {def [ PI ] 3.1415 }
-{defn [ square @x ] ( _ * _ ) }
+
+{with [[@x 2.5] [@y 7.3]] }
+
+{defn [ square @x ] { @x * @x } }
 
 {def [ myList ] [ 1 2 3 4 5 ] }
 {def [ myList2 ] { from 1 to 10 } }

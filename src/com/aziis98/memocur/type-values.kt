@@ -6,17 +6,20 @@ import java.util.*
 // Copyright 2016 Antonio De Lucreziis
 
 
-sealed class Type(val name: String) {
+sealed class Type(val name: String, val weight: Int) {
 
-    object Nothing : Type("nothing")
+    object All : Type("all", 0) {
 
-    object Symbol : Type("symbol")
-    object Number : Type("number")
-    object List : Type("list")
+    }
 
-    object Function : Type("function")
+    object Nothing : Type("nothing", 0)
 
-    class Lambda(val paramCount: Int) : Type("function") {
+    object Symbol : Type("symbol", 1)
+    object Number : Type("number", 1)
+    object List : Type("list", 1)
+
+    object Function : Type("function", 1)
+    class Lambda(val paramCount: Int) : Type("function", 1) {
         override fun hashCode() = name.hashCode()
 
         override fun equals(other: Any?): Boolean {
@@ -33,7 +36,7 @@ sealed class Type(val name: String) {
         }
     }
 
-    object MObject : Type("object")
+    object MObject : Type("object", 1)
 
     override fun hashCode() = name.hashCode()
     override fun equals(other: Any?): Boolean {
@@ -85,6 +88,7 @@ sealed class Value(val type: Type) {
     }
 }
 
+/*
 sealed class Matcher(val type: Type) {
     open fun match(value: Value): Boolean {
         return type == value.type && matchValue(value)
@@ -120,8 +124,22 @@ sealed class Matcher(val type: Type) {
         override fun toString() = "function[${ if (paramCount == -1) "?" else "$paramCount" }]"
     }
 }
+*/
 
-fun matchFunction(paramCount: Int = -1) = Matcher.MatchFunction(paramCount)
-fun matchSymbol(name: String) = Matcher.MatchSymbol(name)
-fun matchType(type: Type) = Matcher.MatchType(type)
-fun matchAny() = Matcher.MatchAny()
+data class Matcher(val type: Type, val predicate: (Value) -> Boolean) {
+    fun match(value: Value) = predicate(value)
+}
+
+fun matchFunction(paramCount: Int = -1) = Matcher(Type.Function) {
+    it is Value.Function && (paramCount == -1 || it.functionType.paramCount == paramCount)
+}
+
+fun matchSymbol(name: String) = Matcher(Type.Symbol) {
+    it is Value.Symbol && it.name == name
+}
+
+fun matchType(type: Type) = Matcher(type) {
+    it.type == type
+}
+
+fun matchAny() = Matcher(Type.All) { true }

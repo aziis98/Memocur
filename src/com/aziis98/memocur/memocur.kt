@@ -55,6 +55,16 @@ fun <T> MutableList<T>.pop() = removeAt(0)
 fun <T> MutableList<T>.peek(at: Int = 0) = get(at)
 fun <T> MutableList<T>.peek(fromIndex: Int, toIndex: Int) = subList(fromIndex, toIndex)
 
+inline fun MemocurContext.addOperatorSignature(symbol: String, crossinline fn: (Value, Value) -> Value) {
+    addSignature(listOf(
+        matchType(Type.Number), matchSymbol(symbol), matchType(Type.Number)
+    )) {
+        val (a, op, b) = it
+
+        return@addSignature fn(a, b)
+    }
+}
+
 object Memocur {
 
     @Suppress("UNUSED_VARIABLE")
@@ -78,90 +88,45 @@ object Memocur {
             }
         )
 
-        addSignature(FunctionSignature(listOf(
-            matchType(Type.Number), matchSymbol("+"), matchType(Type.Number)
-        )) {
-            val (a, plus, b) = it
-
+        addOperatorSignature("+") { a, b ->
             a as Value.Number
             b as Value.Number
-
-            return@FunctionSignature valueNumber(
-                a.value + b.value
-            )
+            return@addOperatorSignature valueNumber(a.value + b.value)
         }
-        )
-
-        addSignature(listOf(
-            matchType(Type.Number), matchSymbol("-"), matchType(Type.Number)
-        )) {
-            val (a, minus, b) = it
-
+        addOperatorSignature("-") { a, b ->
             a as Value.Number
             b as Value.Number
-
-            return@addSignature valueNumber(
-                a.value - b.value
-            )
+            return@addOperatorSignature valueNumber(a.value - b.value)
         }
-
-        addSignature(listOf(
-            matchType(Type.Number), matchSymbol("*"), matchType(Type.Number)
-        )) {
-            val (a, times, b) = it
-
+        addOperatorSignature("*") { a, b ->
             a as Value.Number
             b as Value.Number
-
-            return@addSignature valueNumber(
-                a.value * b.value
-            )
+            return@addOperatorSignature valueNumber(a.value * b.value)
+        }
+        addOperatorSignature("/") { a, b ->
+            a as Value.Number
+            b as Value.Number
+            return@addOperatorSignature valueNumber(a.value / b.value)
+        }
+        addOperatorSignature("%") { a, b ->
+            a as Value.Number
+            b as Value.Number
+            return@addOperatorSignature valueNumber(a.value % b.value)
         }
 
         addSignature(listOf(
-            matchType(Type.Number), matchSymbol("/"), matchType(Type.Number)
-        )) {
-            val (a, divide, b) = it
-
-            a as Value.Number
-            b as Value.Number
-
-            return@addSignature valueNumber(
-                a.value / b.value
-            )
-        }
-
-        addSignature(listOf(
-            matchType(Type.Number), matchSymbol("%"), matchType(Type.Number)
-        )) {
-            val (a, mod, b) = it
-
-            a as Value.Number
-            b as Value.Number
-
-            return@addSignature valueNumber(
-                a.value % b.value
-            )
-        }
-
-        addSignature(FunctionSignature(listOf(
-            matchSymbol("call"),
-            matchFunction(),
-            matchType(Type.List)
+            matchSymbol("call"), matchFunction(), matchType(Type.List)
         )) {
             val (call, fn, args) = it
 
             fn as Value.Function
             args as Value.List
 
-            return@FunctionSignature fn(args.list)
+            return@addSignature fn(args.list)
         }
-        )
 
-        addSignature(FunctionSignature(listOf(
-            matchSymbol("def"),
-            matchType(Type.List),
-            matchAny()
+        addSignature(listOf(
+            matchSymbol("def"), matchType(Type.List), matchAny()
         )) {
             val (def, pattern, value) = it
 
@@ -169,11 +134,21 @@ object Memocur {
 
             val matchList = pattern.list.map { matchSymbol((it as Value.Symbol).name) }
 
-            addSignature(FunctionSignature(matchList, constantExecution(value)))
+            addSignature(FunctionSignature(matchList, constant(value)))
 
-            return@FunctionSignature Value.Nothing
+            return@addSignature value
         }
-        )
+
+        addSignature(listOf(
+            matchSymbol("with"), matchType(Type.List), matchType(Type.Function)
+        )) {
+            val (defn, pattern, fn) = it
+
+
+
+            return@addSignature fn
+        }
+
     }
 
     fun import(path: String) = import(Paths.get(path))
@@ -383,100 +358,11 @@ class FunctionSignature(val signature: List<Matcher>, val functionExecution: (Li
     }
 }
 
-fun constantExecution(constant: Value): (List<Value>) -> Value {
+fun constant(constant: Value): (List<Value>) -> Value {
     return { constant }
 }
-/*
-inline fun fnExecution(crossinline fn: (List<Value>) -> Value): (List<Value>) -> Value {
-    return  { expression -> fn(expression) }
-}*/
 
-/*
 
-1 - { from #number to #number }
-2 - { from #number to #number stepping by #number }
-3 - { from #number to infinity }
-4 - { from #number to infinity stepping by #number }
 
-- Symbol
-  - Number
-    - Symbol
-      - Number
-        + 1
-        - Symbol
-          -Symbol
-            - Number
-              + 2
-      - Symbol
-        + 3
-        - Symbol
-          -Symbol
-            - Number
-              + 4
-            
 
- */
 
-class PatternDefinitions {
-
-    val heads = HashMap<Type, FnDefPatternStruct>()
-
-    fun addSignature(functionSignature: FunctionSignature) {
-
-        fun addRecursive(fnDefPatternStruct: FnDefPatternStruct,
-                         index: Int) {
-
-            if (functionSignature.signature.lastIndex == index) {
-                fnDefPatternStruct.matchingDefs.add(functionSignature)
-                return
-            }
-            else {
-                val cType = functionSignature.signature[index + 1].type
-                var nextBranch = fnDefPatternStruct.nexts[cType]
-
-                if (nextBranch == null) {
-                    nextBranch = FnDefPatternStruct(cType)
-                    fnDefPatternStruct.nexts.put(cType, nextBranch)
-                }
-
-                addRecursive(nextBranch, index + 1)
-            }
-
-        }
-
-        val firstSignatureType = functionSignature.signature[0].type
-        var startBranch = heads[firstSignatureType]
-
-        if (startBranch == null) {
-            startBranch = FnDefPatternStruct(firstSignatureType)
-            heads.put(firstSignatureType, startBranch)
-        }
-
-        addRecursive(startBranch, 0)
-
-    }
-
-    fun getFunctionSignature(arguments: List<Value>): FunctionSignature {
-
-        val errorFn = { error("No pattern found matching: ${arguments.joinToString(" ", "{", "}")}") }
-
-        fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int): FunctionSignature {
-            if (arguments.lastIndex == index) {
-                return defPatternStruct.matchingDefs.find { it.test(arguments) } ?: errorFn()
-            }
-            else {
-                return getRecursive(defPatternStruct.nexts[arguments[index + 1].type] ?: errorFn(), index + 1)
-            }
-        }
-
-        val startBranch = heads[arguments[0].type] ?: errorFn()
-        return getRecursive(startBranch, 0)
-
-    }
-
-}
-
-class FnDefPatternStruct(val type: Type) {
-    val nexts = HashMap<Type, FnDefPatternStruct>()
-    val matchingDefs = LinkedList<FunctionSignature>()
-}

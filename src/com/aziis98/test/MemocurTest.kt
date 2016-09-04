@@ -6,6 +6,8 @@ import printfRec
 
 // Copyright 2016 Antonio De Lucreziis
 
+/*
+
 class MemocurTest {
 
     @Test
@@ -13,26 +15,22 @@ class MemocurTest {
 
         val script = Memocur.import("workspace/script.memc")
 
-
-
         script.patternDefs.addSignature(
-            FunctionSignature(listOf(
-                Matcher.MatchSymbol("from"),
-                Matcher.MatchType(Type.Number),
-                Matcher.MatchSymbol("to"),
-                Matcher.MatchSymbol("infinity")
-            ), fnExecution { Value.Symbol.Nothing })
-        )
+            listOf(
+                matchSymbol("from"),
+                matchType(Type.Number),
+                matchSymbol("to"),
+                matchSymbol("infinity")
+            )
+        ) { Value.Symbol.Nothing }
 
-        script.patternDefs.addSignature(
-            FunctionSignature(listOf(
-                Matcher.MatchSymbol("is"),
-                Matcher.MatchType(Type.Number),
-                Matcher.MatchSymbol("divisible"),
-                Matcher.MatchSymbol("by"),
-                Matcher.MatchType(Type.Number)
-            ), fnExecution { Value.Symbol.Nothing })
-        )
+
+        script.patternDefs.addSignature(listOf(
+                matchSymbol("is"), matchType(Type.Number), matchSymbol("divisible"), matchSymbol("by"), matchType(Type.Number)
+        )) {
+            Value.Symbol.Nothing
+        }
+
 
         script.patternDefs.heads.forEach { type, struct ->
             printfRec(struct) { fsb, struct, rec ->
@@ -66,3 +64,4 @@ class MemocurTest {
     }
 
 }
+*/
