@@ -7,6 +7,9 @@ import java.util.*
 
 
 sealed class Type(val name: String) {
+
+    object Nothing : Type("nothing")
+
     object Symbol : Type("symbol")
     object Number : Type("number")
     object List : Type("list")
@@ -17,9 +20,12 @@ sealed class Type(val name: String) {
         override fun hashCode() = name.hashCode()
 
         override fun equals(other: Any?): Boolean {
-            if (other == null || other !is Lambda) return false
+            if (other == null || (other !is Lambda && other !is Function)) return false
 
-            return paramCount == other.paramCount
+            if (other is Lambda)
+                return paramCount == other.paramCount
+            else
+                return true
         }
 
         override fun toString(): String {
@@ -43,10 +49,13 @@ sealed class Type(val name: String) {
 fun valueSymbol(name: String) = Value.Symbol(name)
 fun valueLambdaPlaceholder() = Value.LambdaPlaceholder()
 fun valueNumber(number: Number) = Value.Number(number.toDouble())
-fun valueListOf(list: List<Value>) = Value.MList(list)
+fun valueListOf(list: List<Value>) = Value.List(list)
 fun valueLambda(functionType: Type.Lambda, function: (List<Value>) -> Value) = Value.Function(functionType, function)
 
 sealed class Value(val type: Type) {
+
+    object Nothing : Value(Type.Nothing)
+
     class Symbol(val name: String) : Value(Type.Symbol) {
         companion object {
             val Nothing = Symbol("nothing")
@@ -63,12 +72,12 @@ sealed class Value(val type: Type) {
         override fun toString() = "$value"
     }
 
-    class MList(val list: List<Value>) : Value(Type.List) {
+    class List(val list: kotlin.collections.List<Value>) : Value(Type.List) {
         override fun toString() = "[${list.joinToString(", ")}]"
     }
 
-    class Function(val functionType: Type.Lambda, val function: (List<Value>) -> Value) : Value(functionType) {
-        operator fun invoke(list: List<Value>) = function(list)
+    class Function(val functionType: Type.Lambda, val function: (kotlin.collections.List<Value>) -> Value) : Value(functionType) {
+        operator fun invoke(list: kotlin.collections.List<Value>) = function(list)
 
         override fun toString(): String {
             return "function($functionType)"
@@ -77,11 +86,17 @@ sealed class Value(val type: Type) {
 }
 
 sealed class Matcher(val type: Type) {
-    fun match(value: Value): Boolean {
+    open fun match(value: Value): Boolean {
         return type == value.type && matchValue(value)
     }
 
     protected abstract fun matchValue(value: Value): Boolean
+
+    class MatchAny() : Matcher(Type.MObject) {
+        override fun match(value: Value) = true
+
+        override fun matchValue(value: Value) = true
+    }
 
     class MatchSymbol(val name: String) : Matcher(Type.Symbol) {
         override fun matchValue(value: Value): Boolean {
@@ -109,3 +124,4 @@ sealed class Matcher(val type: Type) {
 fun matchFunction(paramCount: Int = -1) = Matcher.MatchFunction(paramCount)
 fun matchSymbol(name: String) = Matcher.MatchSymbol(name)
 fun matchType(type: Type) = Matcher.MatchType(type)
+fun matchAny() = Matcher.MatchAny()

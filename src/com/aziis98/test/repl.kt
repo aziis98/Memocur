@@ -14,9 +14,13 @@ fun main(args: Array<String>) {
         val expression = scanner.nextLine()
 
         // Compute the expression
-        val result = Memocur.evaluateExpression(expression)
 
-        println(" => $result")
+        try {
+            val result = Memocur.evaluateExpression(expression)
+            println(" => $result")
+        } catch (e: Exception) {
+            println(" => Exception(${e.message})")
+        }
 
     }
 }

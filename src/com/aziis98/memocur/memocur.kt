@@ -16,7 +16,7 @@ fun stdGluer(a: Char, b: Char): Boolean =
         || (a.isDigit() && b.isDigit())
         || ((a.isDigit() && b == '.') || (a == '.' && b.isDigit()))
 
-fun tokenize(source: CharArray, gluer: (Char, Char)-> Boolean = ::stdGluer): List<CharArray> {
+fun tokenize(source: CharArray, gluer: (Char, Char) -> Boolean = ::stdGluer): List<CharArray> {
 
     val list = mutableListOf<CharArray>()
 
@@ -61,11 +61,8 @@ object Memocur {
     val basicContext = MemocurContext().apply {
         addSignature(
             FunctionSignature(listOf(
-                matchSymbol("from"),
-                matchType(Type.Number),
-                matchSymbol("to"),
-                matchType(Type.Number)
-            ), fnExecution {
+                matchSymbol("from"), matchType(Type.Number), matchSymbol("to"), matchType(Type.Number)
+            )) {
                 val (from, a, to, b) = it
 
                 val aBound = (a as Value.Number).value.toInt()
@@ -73,107 +70,109 @@ object Memocur {
 
                 val intRange = aBound .. bBound
 
-                return@fnExecution Value.MList(
+                return@FunctionSignature Value.List(
                     intRange
                         .map { valueNumber(it) }
                         .toList()
                 )
-            })
+            }
         )
 
         addSignature(FunctionSignature(listOf(
-                matchType(Type.Number),
-                matchSymbol("+"),
-                matchType(Type.Number)
-            ), fnExecution {
-                val (a, plus, b) = it
+            matchType(Type.Number), matchSymbol("+"), matchType(Type.Number)
+        )) {
+            val (a, plus, b) = it
 
-                a as Value.Number
-                b as Value.Number
+            a as Value.Number
+            b as Value.Number
 
-                return@fnExecution valueNumber(
-                    a.value + b.value
-                )
-            })
+            return@FunctionSignature valueNumber(
+                a.value + b.value
+            )
+        }
         )
 
-        addSignature(FunctionSignature(listOf(
-                matchType(Type.Number),
-                matchSymbol("-"),
-                matchType(Type.Number)
-            ), fnExecution {
+        addSignature(listOf(
+            matchType(Type.Number), matchSymbol("-"), matchType(Type.Number)
+        )) {
             val (a, minus, b) = it
 
             a as Value.Number
             b as Value.Number
 
-            return@fnExecution valueNumber(
+            return@addSignature valueNumber(
                 a.value - b.value
             )
-        })
-        )
+        }
 
-        addSignature(FunctionSignature(listOf(
-                matchType(Type.Number),
-                matchSymbol("*"),
-                matchType(Type.Number)
-            ), fnExecution {
+        addSignature(listOf(
+            matchType(Type.Number), matchSymbol("*"), matchType(Type.Number)
+        )) {
             val (a, times, b) = it
 
             a as Value.Number
             b as Value.Number
 
-            return@fnExecution valueNumber(
+            return@addSignature valueNumber(
                 a.value * b.value
             )
-        })
-        )
+        }
 
-        addSignature(FunctionSignature(listOf(
-                matchType(Type.Number),
-                matchSymbol("/"),
-                matchType(Type.Number)
-            ), fnExecution {
+        addSignature(listOf(
+            matchType(Type.Number), matchSymbol("/"), matchType(Type.Number)
+        )) {
             val (a, divide, b) = it
 
             a as Value.Number
             b as Value.Number
 
-            return@fnExecution valueNumber(
+            return@addSignature valueNumber(
                 a.value / b.value
             )
-        })
-        )
+        }
 
-        addSignature(FunctionSignature(listOf(
-                matchType(Type.Number),
-                matchSymbol("%"),
-                matchType(Type.Number)
-            ), fnExecution {
+        addSignature(listOf(
+            matchType(Type.Number), matchSymbol("%"), matchType(Type.Number)
+        )) {
             val (a, mod, b) = it
 
             a as Value.Number
             b as Value.Number
 
-            return@fnExecution valueNumber(
+            return@addSignature valueNumber(
                 a.value % b.value
             )
-        })
-        )
-
+        }
 
         addSignature(FunctionSignature(listOf(
             matchSymbol("call"),
             matchFunction(),
             matchType(Type.List)
-        ), fnExecution {
+        )) {
             val (call, fn, args) = it
 
             fn as Value.Function
-            args as Value.MList
+            args as Value.List
 
-            return@fnExecution fn(args.list)
-        })
+            return@FunctionSignature fn(args.list)
+        }
+        )
+
+        addSignature(FunctionSignature(listOf(
+            matchSymbol("def"),
+            matchType(Type.List),
+            matchAny()
+        )) {
+            val (def, pattern, value) = it
+
+            pattern as Value.List
+
+            val matchList = pattern.list.map { matchSymbol((it as Value.Symbol).name) }
+
+            addSignature(FunctionSignature(matchList, constantExecution(value)))
+
+            return@FunctionSignature Value.Nothing
+        }
         )
     }
 
@@ -192,7 +191,7 @@ object Memocur {
         return memocurScript
     }
 
-    fun evaluateExpression(expression: String, context: MemocurContext = basicContext) : Value {
+    fun evaluateExpression(expression: String, context: MemocurContext = basicContext): Value {
         val tokens = tokenize(expression.toCharArray())
             .map { String(it) }
             .filter { !it.isBlank() }
@@ -224,7 +223,7 @@ object Memocur {
         }
     }
 
-    fun evaluateLambda(element: ASTElement.Lambda, context: MemocurContext) : Value.Function {
+    fun evaluateLambda(element: ASTElement.Lambda, context: MemocurContext): Value.Function {
         val paramCount = element.list.count { it is ASTElement.Leaf.LambdaPlaceholder }
 
         val precomp = element.list.map {
@@ -252,7 +251,7 @@ object Memocur {
         }
     }
 
-    private fun parseExpression(tokens: MutableList<String>) : ASTElement {
+    private fun parseExpression(tokens: MutableList<String>): ASTElement {
         val next = tokens.peek()
 
         return when {
@@ -276,7 +275,7 @@ object Memocur {
         }
     }
 
-    private fun parseFunctionCall(tokens: MutableList<String>) : ASTElement {
+    private fun parseFunctionCall(tokens: MutableList<String>): ASTElement {
         val list = mutableListOf<ASTElement>()
         var isLambda = false
 
@@ -319,11 +318,11 @@ object Memocur {
         return ASTElement.Leaf.LambdaPlaceholder()
     }
 
-    private fun parseNumber(tokens: MutableList<String>) : ASTElement.Leaf.Number {
+    private fun parseNumber(tokens: MutableList<String>): ASTElement.Leaf.Number {
         return ASTElement.Leaf.Number(tokens.pop())
     }
 
-    private fun parseSymbol(tokens: MutableList<String>) : ASTElement.Leaf.Symbol {
+    private fun parseSymbol(tokens: MutableList<String>): ASTElement.Leaf.Symbol {
         return ASTElement.Leaf.Symbol(tokens.pop())
     }
 
@@ -337,12 +336,15 @@ sealed class ASTElement(val list: kotlin.collections.List<ASTElement>) {
 
         override fun toString() = "Leaf($source)"
     }
+
     class Lambda(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
         override fun toString() = list.joinToString(", ", "Lambda(", ")")
     }
+
     class Call(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
         override fun toString() = list.joinToString(", ", "FunctionCall(", ")")
     }
+
     class List(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
         override fun toString() = list.joinToString(", ", "List(", ")")
     }
@@ -353,6 +355,10 @@ class MemocurContext(val parent: MemocurContext? = null) {
 
     val patternDefs = PatternDefinitions()
 
+    fun addSignature(list: List<Matcher>, fn: (List<Value>) -> Value) {
+        addSignature(FunctionSignature(list, fn))
+    }
+
     fun addSignature(functionSignature: FunctionSignature) {
         patternDefs.addSignature(functionSignature)
     }
@@ -362,12 +368,12 @@ class MemocurContext(val parent: MemocurContext? = null) {
     }
 
     fun evaluatePattern(arguments: List<Value>): Value {
-        return getFunctionSignature(arguments).functionExecution.execute(arguments)
+        return getFunctionSignature(arguments).functionExecution(arguments)
     }
-    
+
 }
 
-class FunctionSignature(val signature: List<Matcher>, val functionExecution: FunctionExecution) {
+class FunctionSignature(val signature: List<Matcher>, val functionExecution: (List<Value>) -> Value) {
     fun test(expression: List<Value>): Boolean {
         expression.forEachIndexed { i, value ->
             if (!signature[i].match(value))
@@ -377,17 +383,13 @@ class FunctionSignature(val signature: List<Matcher>, val functionExecution: Fun
     }
 }
 
-inline fun fnExecution(crossinline fn: (List<Value>) -> Value): FunctionExecution {
-    return object : FunctionExecution() {
-        override fun execute(expression: List<Value>): Value {
-            return fn(expression)
-        }
-    }
+fun constantExecution(constant: Value): (List<Value>) -> Value {
+    return { constant }
 }
-
-abstract class FunctionExecution() {
-    abstract fun execute(expression: List<Value>) : Value
-}
+/*
+inline fun fnExecution(crossinline fn: (List<Value>) -> Value): (List<Value>) -> Value {
+    return  { expression -> fn(expression) }
+}*/
 
 /*
 
@@ -458,7 +460,7 @@ class PatternDefinitions {
 
         val errorFn = { error("No pattern found matching: ${arguments.joinToString(" ", "{", "}")}") }
 
-        fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int) : FunctionSignature {
+        fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int): FunctionSignature {
             if (arguments.lastIndex == index) {
                 return defPatternStruct.matchingDefs.find { it.test(arguments) } ?: errorFn()
             }
