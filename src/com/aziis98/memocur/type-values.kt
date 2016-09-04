@@ -11,16 +11,19 @@ sealed class Type(val name: String) {
     object Number : Type("number")
     object List : Type("list")
 
-    class Function(val paramCount: Int) : Type("function") {
-        override fun hashCode() = Objects.hash(name, paramCount)
-        override fun equals(other: Any?): Boolean {
-            if (other == null || other !is Function) return false
+    object Function : Type("function")
 
-            return other.name == name && other.paramCount == paramCount
+    class Lambda(val paramCount: Int) : Type("function") {
+        override fun hashCode() = name.hashCode()
+
+        override fun equals(other: Any?): Boolean {
+            if (other == null || other !is Lambda) return false
+
+            return paramCount == other.paramCount
         }
 
         override fun toString(): String {
-            return "(${ (1 .. paramCount).map { "?" }.joinToString(", ") }) -> ?"
+            return "${(1 .. paramCount).map { "?" }.joinToString(", ", "(", ")")}->?"
         }
     }
 
@@ -41,7 +44,7 @@ fun valueSymbol(name: String) = Value.Symbol(name)
 fun valueLambdaPlaceholder() = Value.LambdaPlaceholder()
 fun valueNumber(number: Number) = Value.Number(number.toDouble())
 fun valueListOf(list: List<Value>) = Value.MList(list)
-fun valueLambda(functionType: Type.Function, function: (List<Value>) -> Value) = Value.Function(functionType, function)
+fun valueLambda(functionType: Type.Lambda, function: (List<Value>) -> Value) = Value.Function(functionType, function)
 
 sealed class Value(val type: Type) {
     class Symbol(val name: String) : Value(Type.Symbol) {
@@ -49,7 +52,7 @@ sealed class Value(val type: Type) {
             val Nothing = Symbol("nothing")
         }
 
-        override fun toString() = ":$name"
+        override fun toString() = "$name"
     }
 
     class LambdaPlaceholder : Value(Type.Symbol) {
@@ -64,11 +67,11 @@ sealed class Value(val type: Type) {
         override fun toString() = "[${list.joinToString(", ")}]"
     }
 
-    class Function(val functionType: Type.Function, val function: (List<Value>) -> Value) : Value(functionType) {
+    class Function(val functionType: Type.Lambda, val function: (List<Value>) -> Value) : Value(functionType) {
         operator fun invoke(list: List<Value>) = function(list)
 
         override fun toString(): String {
-            return "function $functionType"
+            return "function($functionType)"
         }
     }
 }
@@ -94,9 +97,9 @@ sealed class Matcher(val type: Type) {
         override fun toString() = "$type"
     }
 
-    class MatchFunction(val paramCount: Int = -1) : Matcher(Type.Function(paramCount)) {
+    class MatchFunction(val paramCount: Int = -1) : Matcher(Type.Function) {
         override fun matchValue(value: Value): Boolean {
-            return paramCount >= 0 && (value as Value.Function).functionType.paramCount == paramCount
+            return paramCount == -1 || (value as Value.Function).functionType.paramCount == paramCount
         }
 
         override fun toString() = "function[${ if (paramCount == -1) "?" else "$paramCount" }]"

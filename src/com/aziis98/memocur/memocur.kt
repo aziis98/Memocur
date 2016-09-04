@@ -231,7 +231,7 @@ object Memocur {
             evaluateASTElement(it, context)
         }
 
-        return Value.Function(Type.Function(paramCount)) { arguments ->
+        return Value.Function(Type.Lambda(paramCount)) { arguments ->
             if (arguments.size != paramCount) error("Called $precomp with ${arguments.size} arguments instead of $paramCount")
 
             val actualParams = mutableListOf<Value>()
@@ -456,7 +456,7 @@ class PatternDefinitions {
 
     fun getFunctionSignature(arguments: List<Value>): FunctionSignature {
 
-        val errorFn = { error("No pattern found matching: $arguments") }
+        val errorFn = { error("No pattern found matching: ${arguments.joinToString(" ", "{", "}")}") }
 
         fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int) : FunctionSignature {
             if (arguments.lastIndex == index) {
