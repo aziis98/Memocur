@@ -13,27 +13,7 @@ class MemocurTest {
 
         val script = Memocur.import("workspace/script.memc")
 
-        script.patternDefs.addSignature(
-            FunctionSignature(listOf(
-                Matcher.MatchSymbol("from"),
-                Matcher.MatchType(Type.Number),
-                Matcher.MatchSymbol("to"),
-                Matcher.MatchType(Type.Number)
-            ), fnExecution {
-                val (from, a, to, b) = it
 
-                val aBound = (a as Value.Number).value.toInt()
-                val bBound = (b as Value.Number).value.toInt()
-
-                val intRange = aBound .. bBound
-
-                return@fnExecution Value.MList(
-                    intRange
-                        .map { Value.Number(it.toDouble()) }
-                        .toList()
-                )
-            })
-        )
 
         script.patternDefs.addSignature(
             FunctionSignature(listOf(

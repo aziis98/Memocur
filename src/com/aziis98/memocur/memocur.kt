@@ -17,10 +17,6 @@ fun stdGluer(a: Char, b: Char): Boolean =
         || (a.isDigit() && b.isDigit())
         || ((a.isDigit() && b == '.') || (a == '.' && b.isDigit()))
 
-//  "abc123 123§§123  abc"
-// "abc123 123§§123  abc"
-//
-// "abc123"," ","123","§","§","123","  ","abc"
 fun tokenize(source: CharArray, gluer: (Char, Char)-> Boolean = ::stdGluer): List<CharArray> {
 
     val list = mutableListOf<CharArray>()
@@ -69,7 +65,27 @@ sealed class Expression {
 object Memocur {
 
     val basicContext = MemocurContext().apply {
+        addSignature(
+            FunctionSignature(listOf(
+                matchSymbol("from"),
+                matchType(Type.Number),
+                matchSymbol("to"),
+                matchType(Type.Number)
+            ), fnExecution {
+                val (from, a, to, b) = it
 
+                val aBound = (a as Value.Number).value.toInt()
+                val bBound = (b as Value.Number).value.toInt()
+
+                val intRange = aBound .. bBound
+
+                return@fnExecution Value.MList(
+                    intRange
+                        .map { valueNumber(it) }
+                        .toList()
+                )
+            })
+        )
     }
 
     fun import(path: String) = import(Paths.get(path))
@@ -80,9 +96,9 @@ object Memocur {
 
         val tokens = tokenize(source.toCharArray()).map { String(it) }.toMutableList()
 
-        val memocurScript = MemocurContext()
+        val memocurScript = MemocurContext(basicContext)
 
-        parseScript(tokens, memocurScript)
+        // parseScript(tokens, memocurScript)
 
         return memocurScript
     }
@@ -90,31 +106,87 @@ object Memocur {
     fun evaluateExpression(expression: String, context: MemocurContext = basicContext) : Value {
         val tokens = tokenize(expression.toCharArray())
             .map { String(it) }
+            .filter { !it.isBlank() }
             .toMutableList()
 
-        parseExpression(tokens, context)
+        val astRoot = parseExpression(tokens)
+
+        println(astRoot.toString())
 
         return Value.Symbol("nothing")
     }
 
-    private fun parseScript(tokens: MutableList<String>, context: MemocurContext) {
 
-        while (tokens.isEmpty()) {
-            when (tokens.peek()) {
 
-                "[" -> parseExpression(tokens, context)
+    private fun parseExpression(tokens: MutableList<String>) : ASTElement {
+        val next = tokens.peek()
 
-            }
+        return when {
+            next == "{" ->
+                parseFunctionCall(tokens)
+            next == "[" ->
+                parseList(tokens)
+            RegexPatterns.NUMBER.matches(next) ->
+                parseNumber(tokens)
+            RegexPatterns.SYMBOL.matches(next) ->
+                parseSymbol(tokens)
+
+            else -> error("Unable to parse: $next")
         }
-
     }
 
-    private fun parseExpression(tokens: MutableList<String>, context: MemocurContext) {
-        
+    private fun parseFunctionCall(tokens: MutableList<String>) : ASTElement.Call {
+        val list = mutableListOf<ASTElement>()
+
+        tokens.pop()
+
+        while (tokens.peek() != "}") {
+            list.add(parseExpression(tokens))
+        }
+
+        tokens.pop()
+
+        return ASTElement.Call(list)
+    }
+
+    private fun parseList(tokens: MutableList<String>): ASTElement.List {
+        val list = mutableListOf<ASTElement>()
+
+        tokens.pop()
+
+        while (tokens.peek() != "]") {
+            list.add(parseExpression(tokens))
+        }
+
+        tokens.pop()
+
+        return ASTElement.List(list)
+    }
+
+    private fun parseNumber(tokens: MutableList<String>) : ASTElement.Leaf.Number {
+        return ASTElement.Leaf.Number(tokens.pop())
+    }
+
+    private fun parseSymbol(tokens: MutableList<String>) : ASTElement.Leaf.Symbol {
+        return ASTElement.Leaf.Symbol(tokens.pop())
     }
 
 }
 
+sealed class ASTElement(val list: kotlin.collections.List<ASTElement>) {
+    sealed class Leaf(val source: String) : ASTElement(emptyList()) {
+        class Number(source: String) : Leaf(source)
+        class Symbol(source: String) : Leaf(source)
+
+        override fun toString() = "Leaf($source)"
+    }
+    class Call(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
+        override fun toString() = list.joinToString(", ", "FunctionCall(", ")")
+    }
+    class List(list: kotlin.collections.List<ASTElement>) : ASTElement(list) {
+        override fun toString() = list.joinToString(", ", "List(", ")")
+    }
+}
 
 
 class MemocurContext(val parent: MemocurContext? = null) {
@@ -153,6 +225,10 @@ sealed class Type(val name: String) {
     override fun toString() = "[$name]"
 }
 
+fun valueSymbol(name: String) = Value.Symbol(name)
+fun valueNumber(number: Number) = Value.Number(number.toDouble())
+fun valueListOf(vararg list: Value) = Value.MList(list.toList())
+
 sealed class Value(val type: Type) {
     class Symbol(val name: String) : Value(Type.Symbol) {
         companion object {
@@ -168,6 +244,9 @@ sealed class Value(val type: Type) {
         override fun toString() = "List(${list.joinToString(", ")})"
     }
 }
+
+fun matchSymbol(name: String) = Matcher.MatchSymbol(name)
+fun matchType(type: Type) = Matcher.MatchType(type)
 
 sealed class Matcher(val type: Type) {
     fun match(value: Value): Boolean {

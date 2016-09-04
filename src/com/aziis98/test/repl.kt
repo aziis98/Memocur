@@ -8,7 +8,7 @@ import java.util.*
 fun main(args: Array<String>) {
     val scanner = Scanner(System.`in`)
 
-    while (true) {
+    // while (true) {
 
         print("$ ")
         val expression = scanner.nextLine()
@@ -18,5 +18,5 @@ fun main(args: Array<String>) {
 
         println(" => $result")
 
-    }
+    // }
 }
