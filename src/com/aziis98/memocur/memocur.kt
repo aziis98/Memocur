@@ -1,5 +1,7 @@
 package com.aziis98.memocur
 
+import com.aziis98.memocur.includes.*
+import jdk.nashorn.internal.runtime.regexp.joni.constants.Arguments
 import java.nio.file.*
 import java.util.*
 
@@ -55,20 +57,16 @@ fun <T> MutableList<T>.pop() = removeAt(0)
 fun <T> MutableList<T>.peek(at: Int = 0) = get(at)
 fun <T> MutableList<T>.peek(fromIndex: Int, toIndex: Int) = subList(fromIndex, toIndex)
 
-inline fun MemocurContext.addOperatorSignature(symbol: String, crossinline fn: (Value, Value) -> Value) {
-    addSignature(listOf(
-        matchType(Type.Number), matchSymbol(symbol), matchType(Type.Number)
-    )) {
-        val (a, op, b) = it
 
-        return@addSignature fn(a, b)
-    }
-}
 
 object Memocur {
 
+    fun context(vararg includes: MemocurContext, fn: MemocurContext.() -> Unit): MemocurContext {
+        return MemocurContext(includes.toMutableList()).apply(fn)
+    }
+
     @Suppress("UNUSED_VARIABLE")
-    val basicContext = MemocurContext().apply {
+    val basicContext = context(MemoCore.core) {
         addSignature(
             FunctionSignature(listOf(
                 matchSymbol("from"), matchType(Type.Number), matchSymbol("to"), matchType(Type.Number)
@@ -88,32 +86,6 @@ object Memocur {
             }
         )
 
-        addOperatorSignature("+") { a, b ->
-            a as Value.Number
-            b as Value.Number
-            return@addOperatorSignature valueNumber(a.value + b.value)
-        }
-        addOperatorSignature("-") { a, b ->
-            a as Value.Number
-            b as Value.Number
-            return@addOperatorSignature valueNumber(a.value - b.value)
-        }
-        addOperatorSignature("*") { a, b ->
-            a as Value.Number
-            b as Value.Number
-            return@addOperatorSignature valueNumber(a.value * b.value)
-        }
-        addOperatorSignature("/") { a, b ->
-            a as Value.Number
-            b as Value.Number
-            return@addOperatorSignature valueNumber(a.value / b.value)
-        }
-        addOperatorSignature("%") { a, b ->
-            a as Value.Number
-            b as Value.Number
-            return@addOperatorSignature valueNumber(a.value % b.value)
-        }
-
         addSignature(listOf(
             matchSymbol("call"), matchFunction(), matchType(Type.List)
         )) {
@@ -126,7 +98,7 @@ object Memocur {
         }
 
         addSignature(listOf(
-            matchSymbol("def"), matchType(Type.List), matchAny()
+            matchSymbol("def"), matchType(Type.List), matchAll()
         )) {
             val (def, pattern, value) = it
 
@@ -154,33 +126,43 @@ object Memocur {
     fun import(path: String) = import(Paths.get(path))
 
     fun import(path: Path): MemocurContext {
+        val source = Files.readAllLines(path)
+            .joinToString("\n")
+            .replace(RegexPatterns.COMMENT_BLOCK, "")
+            .replace(RegexPatterns.COMMENT_LINE, "")
+            .trim()
 
-        val source = Files.readAllLines(path).joinToString("\n")
+        println()
+        println("---< the file >---")
+        println(source)
+        println("------------------")
+        println()
 
-        val tokens = tokenize(source.toCharArray()).map { String(it) }.toMutableList()
-
-        val memocurScript = MemocurContext(basicContext)
-
-        // parseScript(tokens, memocurScript)
-
-        return memocurScript
+        return evaluateSource(source)
     }
 
-    fun evaluateExpression(expression: String, context: MemocurContext = basicContext): Value {
-        val tokens = tokenize(expression.toCharArray())
+    fun evaluateSource(source: String, context: MemocurContext = basicContext): MemocurContext {
+        val tokens = tokenize(source.toCharArray())
             .map { String(it) }
             .filter { !it.isBlank() }
             .toMutableList()
 
-        val astRoot = parseExpression(tokens)
+        val astRoot = parseScript(tokens)
 
-        // println("Abstract Syntaxt Tree : $astRoot")
+        evaluateASTElement(astRoot, context)
 
-        return evaluateASTElement(astRoot, context)
+        return context
     }
 
     fun evaluateASTElement(element: ASTElement, context: MemocurContext): Value {
         return when (element) {
+
+            is ASTElement.Block -> {
+                element.list.forEach {
+                    evaluateASTElement(it, context)
+                }
+                return Value.Nothing
+            }
 
             is ASTElement.Leaf.Number -> valueNumber(element.source.toDouble())
 
@@ -188,9 +170,13 @@ object Memocur {
 
             is ASTElement.Leaf.LambdaPlaceholder -> valueLambdaPlaceholder()
 
-            is ASTElement.List -> valueListOf(element.list.map { evaluateASTElement(it, context) })
+            is ASTElement.List -> {
+                val listContext = Memocur.context(context) { }
 
-            is ASTElement.Call -> context.evaluatePattern(element.list.map { evaluateASTElement(it, context) })
+                valueListOf(element.list.map { evaluateASTElement(it, listContext) })
+            }
+
+            is ASTElement.Call -> context.evaluate(element.list.map { evaluateASTElement(it, context) })
 
             is ASTElement.Lambda -> evaluateLambda(element, context)
 
@@ -222,8 +208,18 @@ object Memocur {
                 }
             }
 
-            context.evaluatePattern(actualParams)
+            context.evaluate(actualParams)
         }
+    }
+
+    private fun parseScript(tokens: MutableList<String>) : ASTElement {
+        val list = mutableListOf<ASTElement>()
+
+        while (tokens.isNotEmpty()) {
+            list.add(parseExpression(tokens))
+        }
+
+        return ASTElement.Block(list)
     }
 
     private fun parseExpression(tokens: MutableList<String>): ASTElement {
@@ -304,6 +300,9 @@ object Memocur {
 }
 
 sealed class ASTElement(val list: kotlin.collections.List<ASTElement>) {
+
+    class Block(list: kotlin.collections.List<ASTElement>) : ASTElement(list)
+
     sealed class Leaf(val source: String) : ASTElement(emptyList()) {
         class Number(source: String) : Leaf(source)
         class Symbol(source: String) : Leaf(source)
@@ -326,7 +325,7 @@ sealed class ASTElement(val list: kotlin.collections.List<ASTElement>) {
 }
 
 
-class MemocurContext(val parent: MemocurContext? = null) {
+class MemocurContext(val includes: MutableList<MemocurContext> = mutableListOf()) {
 
     val patternDefs = PatternDefinitions()
 
@@ -338,17 +337,30 @@ class MemocurContext(val parent: MemocurContext? = null) {
         patternDefs.addSignature(functionSignature)
     }
 
-    fun getFunctionSignature(arguments: List<Value>): FunctionSignature {
-        return patternDefs.getFunctionSignature(arguments)
+    fun getFunctionSignature(arguments: List<Value>): FunctionSignature? {
+        val signature = patternDefs.getFunctionSignature(arguments)
+
+        if (signature == null) {
+            includes.forEach {
+                val parentSignature = it.getFunctionSignature(arguments)
+
+                if (parentSignature != null) return parentSignature
+            }
+        }
+        else {
+            return signature
+        }
+
+        return null
     }
 
-    fun evaluatePattern(arguments: List<Value>): Value {
-        return getFunctionSignature(arguments).functionExecution(arguments)
+    fun evaluate(arguments: List<Value>): Value {
+        return (getFunctionSignature(arguments) ?: error("No pattern for $arguments")).functionExecution.invoke(arguments)
     }
 
 }
 
-class FunctionSignature(val signature: List<Matcher>, val functionExecution: (List<Value>) -> Value) {
+data class FunctionSignature(val signature: List<Matcher>, val functionExecution: (List<Value>) -> Value) {
     fun test(expression: List<Value>): Boolean {
         expression.forEachIndexed { i, value ->
             if (!signature[i].match(value))

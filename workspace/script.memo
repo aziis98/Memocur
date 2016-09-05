@@ -33,6 +33,9 @@ List
 
 {def [ doubled ] { map myList2 {_ * 2} } }
 {def [ doubledDivBy3 ] { filter doubled {_ divisible by 3} } }
+
+{def [ main ] {doubledDivBy3} }
+
 // ( _ * 2 ) => ( x -> x * 2 )
 // => doubled = [ 2 4 6 .. 20 ]
 

@@ -142,4 +142,4 @@ fun matchType(type: Type) = Matcher(type) {
     it.type == type
 }
 
-fun matchAny() = Matcher(Type.All) { true }
+fun matchAll() = Matcher(Type.All) { true }

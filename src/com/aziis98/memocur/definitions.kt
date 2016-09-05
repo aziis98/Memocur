@@ -18,6 +18,13 @@ class PatternDefinitions {
                          index: Int) {
 
             if (functionSignature.signature.lastIndex == index) {
+                val present = fnDefPatternStruct.matchingDefs.find { it.signature.map { it.type } == functionSignature.signature.map { it.type } }
+
+                if (present != null) {
+                    println("[UPDATEING] $functionSignature")
+                    fnDefPatternStruct.matchingDefs.remove(present)
+                }
+
                 fnDefPatternStruct.matchingDefs.add(functionSignature)
                 return
             }
@@ -48,20 +55,22 @@ class PatternDefinitions {
 
     }
 
-    fun getFunctionSignature(arguments: List<Value>): FunctionSignature {
+    fun getFunctionSignature(arguments: List<Value>): FunctionSignature? {
 
-        val errorFn = { error("No pattern found matching: ${arguments.joinToString(" ", "{", "}")}") }
+        // val errorFn = { error("No pattern found matching: ${arguments.joinToString(" ", "{", "}")}") }
 
-        fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int): FunctionSignature {
+        fun getRecursive(defPatternStruct: FnDefPatternStruct, index: Int): FunctionSignature? {
             if (arguments.lastIndex == index) {
-                return defPatternStruct.matchingDefs.find { it.test(arguments) } ?: errorFn()
+                return defPatternStruct.matchingDefs.find { it.test(arguments) } ?: null
             }
             else {
-                return getRecursive(defPatternStruct.nexts.getBestMatch(arguments[index + 1].type) ?: errorFn(), index + 1)
+                val defPatternStruct1 = defPatternStruct.nexts.getBestMatch(arguments[index + 1].type) ?: return null
+
+                return getRecursive(defPatternStruct1, index + 1)
             }
         }
 
-        val startBranch = heads.getBestMatch(arguments[0].type) ?: errorFn()
+        val startBranch = heads.getBestMatch(arguments[0].type) ?: return null
         return getRecursive(startBranch, 0)
 
     }

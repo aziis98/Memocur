@@ -1,0 +1,28 @@
+// Test
+
+{def [a] 7.3}
+{def [a] 3.2}
+
+{println {def [a] 5.4}}
+
+{println {a}}
+
+{def [myList] {from 1 to 10}}
+
+{println
+    {pipe {myList} through [
+        {filter _ by {is _ divisible by 2}}
+        {map _ by {_ * 3}}
+    ]}
+}
+
+// -- But Also -- //
+
+{def [miaList1] {lista da 1 a 10}}
+
+{scriviln
+    {spingi {miaList1} attraverso [
+        {filtra _ con {è _ divisibile per 2}}
+        {mappa _ con {_ * 3}}
+    ]}
+}

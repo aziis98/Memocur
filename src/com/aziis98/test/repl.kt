@@ -13,10 +13,10 @@ fun main(args: Array<String>) {
         print("$ ")
         val expression = scanner.nextLine()
 
-        // Compute the expression
+        // Compute the source
 
         try {
-            val result = Memocur.evaluateExpression(expression)
+            val result = Memocur.evaluateSource(expression)
             println(" => $result")
         } catch (e: Exception) {
             println(" => Exception(${e.message})")
